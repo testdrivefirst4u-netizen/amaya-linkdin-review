@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid theme("colors.brass.DEFAULT");
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .wrap {
+    @apply mx-auto w-full max-w-page px-4 sm:px-6 lg:px-9;
+  }
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.2em];
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-sq border border-brass bg-transparent px-3.5 py-2 text-[13px] font-medium text-navy transition-colors hover:bg-brass-wash disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent;
+  }
+  .btn-primary {
+    @apply border-navy bg-navy text-white hover:border-navy-2 hover:bg-navy-2 disabled:hover:bg-navy;
+  }
+  .field-label {
+    @apply text-[11px] font-medium uppercase tracking-[0.16em] text-muted;
+  }
+  .input {
+    @apply w-full rounded-sq border border-line bg-white px-3 py-2 text-ink placeholder:text-muted/70;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
