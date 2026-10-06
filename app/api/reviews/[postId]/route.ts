@@ -1,5 +1,6 @@
 import { getHistory, getPost, getReview, parseReviewInput, resetReview, saveReview } from "@/lib/data";
-import { fail, handleError, ok } from "@/lib/http";
+import { requireAdmin, requireUser } from "@/lib/auth";
+import { fail, handleError, ok, readJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
@@ -17,31 +18,26 @@ export async function GET(_req: Request, { params }: Ctx) {
   }
 }
 
-// PUT /api/reviews/:postId  body: { status, reviewer, feedback, remarks }
+// PUT /api/reviews/:postId  body: { status, feedback, remarks }. Saves the signed-in person's own review.
+// Returns { review (the post's overall status), people (everyone's own reviews) }.
 export async function PUT(req: Request, { params }: Ctx) {
   try {
+    const user = await requireUser();
     const { postId } = await params;
     if (!(await getPost(postId))) return fail("No post with that ID.", 404);
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      return fail("Send the review as JSON.");
-    }
-    const review = await saveReview(postId, parseReviewInput(body));
-    return ok(review);
+    return ok(await saveReview(postId, parseReviewInput(await readJson(req)), user.name));
   } catch (err) {
     return handleError(err);
   }
 }
 
-// DELETE /api/reviews/:postId?reviewer=Name -> clears the review back to "Awaiting review"
-export async function DELETE(req: Request, { params }: Ctx) {
+// DELETE /api/reviews/:postId (admin) -> clears every founder's review back to "Awaiting review"
+export async function DELETE(_req: Request, { params }: Ctx) {
   try {
+    const user = await requireAdmin();
     const { postId } = await params;
     if (!(await getPost(postId))) return fail("No post with that ID.", 404);
-    const reviewer = new URL(req.url).searchParams.get("reviewer") || "";
-    await resetReview(postId, reviewer);
+    await resetReview(postId, user.name);
     return ok({ postId, reset: true });
   } catch (err) {
     return handleError(err);

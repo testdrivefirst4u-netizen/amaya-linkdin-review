@@ -23,6 +23,7 @@ const COLUMNS: { header: string; width: number; value: (p: Post, r?: Review) => 
   { header: "Post copy", width: 80, value: (p) => p.copy },
   { header: "Hashtags", width: 36, value: (p) => p.hashtags },
   { header: "Source / tag", width: 50, value: (p) => p.source },
+  { header: "Images", width: 60, value: (p) => (p.images ?? []).map((i) => i.url).join("\n") },
 ];
 
 const STATUS_FILL: Record<string, string> = { approved: "FFE4F1E6", rejected: "FFF8E3DE", pending: "FFEFEDE8" };

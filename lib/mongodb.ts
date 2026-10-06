@@ -13,6 +13,8 @@ export const COLLECTIONS = {
   reviews: "reviews",
   history: "review_history",
   settings: "settings",
+  users: "users",
+  suggestions: "suggestions",
 } as const;
 
 /**
@@ -63,5 +65,8 @@ export async function ensureIndexes(db: Db) {
     db.collection(COLLECTIONS.reviews).createIndex({ postId: 1 }, { unique: true }),
     db.collection(COLLECTIONS.history).createIndex({ postId: 1, at: -1 }),
     db.collection(COLLECTIONS.settings).createIndex({ key: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.users).createIndex({ username: 1 }, { unique: true }),
+    db.collection(COLLECTIONS.suggestions).createIndex({ postId: 1, createdAt: -1 }),
+    db.collection(COLLECTIONS.suggestions).createIndex({ status: 1, createdAt: -1 }),
   ]);
 }

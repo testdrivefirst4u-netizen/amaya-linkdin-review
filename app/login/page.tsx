@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 function LoginForm() {
   const router = useRouter();
   const next = useSearchParams().get("next") || "/";
-  const [code, setCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -18,13 +19,13 @@ function LoginForm() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ username, password }),
       });
       if (!res.ok) {
-        setError((await res.json()).error || "That access code isn't right.");
+        setError((await res.json()).error || "That username or password isn't right.");
         return;
       }
-      router.replace(next.startsWith("/") ? next : "/");
+      router.replace(next.startsWith("/") && !next.startsWith("//") ? next : "/");
       router.refresh();
     } catch {
       setError("Couldn't reach the server. Check your connection and try again.");
@@ -36,20 +37,36 @@ function LoginForm() {
   return (
     <form onSubmit={submit} className="grid gap-4">
       <label className="grid gap-1.5">
-        <span className="field-label">Access code</span>
+        <span className="field-label">Username</span>
         <input
-          id="code"
-          type="password"
-          autoComplete="current-password"
+          id="username"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           autoFocus
           className="input"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
         />
       </label>
-      {error && <p className="text-sm text-no-fg">{error}</p>}
-      <button className="btn btn-primary" disabled={busy || !code}>
-        {busy ? "Checking…" : "Open calendar"}
+      <label className="grid gap-1.5">
+        <span className="field-label">Password</span>
+        <input
+          id="password"
+          type="password"
+          autoComplete="current-password"
+          className="input"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </label>
+      {error && (
+        <p className="text-sm text-no-fg" role="alert">
+          {error}
+        </p>
+      )}
+      <button className="btn btn-primary" disabled={busy || !username || !password}>
+        {busy ? "Signing in…" : "Sign in"}
       </button>
     </form>
   );
@@ -61,7 +78,7 @@ export default function LoginPage() {
       <div className="mx-auto max-w-sm border-t-2 border-brass bg-paper p-8">
         <div className="eyebrow text-brass">Vera Vita Living · Founder review</div>
         <h1 className="mt-2 font-serif text-4xl font-semibold text-navy">Amaya on LinkedIn</h1>
-        <p className="mb-6 mt-2 text-sm text-muted">Enter the access code BroaddCast shared with you to review the calendar.</p>
+        <p className="mb-6 mt-2 text-sm text-muted">Sign in with the username and password BroaddCast sent you.</p>
         <Suspense>
           <LoginForm />
         </Suspense>

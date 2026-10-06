@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { POLL_MS, REVIEWERS } from "@/lib/config";
+import { POLL_MS } from "@/lib/config";
 import { formatTimestamp } from "@/lib/format";
-import type { MixData, Post, Review } from "@/lib/types";
+import type { MixData, PersonReview, Post, Review, SessionUser } from "@/lib/types";
 import MixPanel from "./MixPanel";
 import PostList from "./PostList";
 
@@ -14,63 +14,63 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "founder", label: "Founders" },
   { id: "mix", label: "Monthly content mix" },
 ];
-const NAME_KEY = "amaya-reviewer-name";
+type Props = {
+  posts: Post[];
+  postsVersion: string;
+  initialReviews: Review[];
+  initialPeople: Record<string, PersonReview[]>;
+  mix: MixData;
+  user: SessionUser;
+  openSuggestions: number;
+};
 
-type Props = { posts: Post[]; initialReviews: Review[]; mix: MixData; canSignOut: boolean };
-
-export default function CalendarApp({ posts, initialReviews, mix, canSignOut }: Props) {
+export default function CalendarApp({ posts, postsVersion, initialReviews, initialPeople, mix, user, openSuggestions }: Props) {
   const router = useRouter();
   const [reviews, setReviews] = useState<Record<string, Review>>(() => Object.fromEntries(initialReviews.map((r) => [r.postId, r])));
+  const [people, setPeople] = useState<Record<string, PersonReview[]>>(initialPeople);
   const [tab, setTab] = useState<Tab>("company");
-  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
-  const [reviewerName, setReviewerName] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sync, setSync] = useState<{ ok: boolean; at: string }>({ ok: true, at: new Date().toISOString() });
   const dirtyIds = useRef(new Set<string>());
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
+  const versionRef = useRef(postsVersion);
+  versionRef.current = postsVersion;
 
   const company = useMemo(() => posts.filter((p) => p.channel === "company"), [posts]);
   const founder = useMemo(() => posts.filter((p) => p.channel === "founder"), [posts]);
 
-  // Remember who is reviewing on this device.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(NAME_KEY);
-      if (saved && (REVIEWERS as readonly string[]).includes(saved)) setReviewerName(saved);
-    } catch {
-      /* storage blocked */
-    }
-  }, []);
-  function chooseName(name: string) {
-    setReviewerName(name);
-    try {
-      localStorage.setItem(NAME_KEY, name);
-    } catch {
-      /* storage blocked */
-    }
-  }
-
-  // Deep links: /#CO-W05 or /#founder
+  // Deep links: /#CO-W05 opens that post's panel; /#founder picks a tab.
   useEffect(() => {
     const applyHash = () => {
       const h = decodeURIComponent(window.location.hash.slice(1));
-      if (!h) return;
-      if (h === "company" || h === "founder" || h === "mix") return setTab(h);
-      const post = posts.find((p) => p.postId === h);
+      if (!h) return setSelectedId(null);
+      if (h === "company" || h === "founder" || h === "mix") {
+        setSelectedId(null);
+        return setTab(h);
+      }
+      const post = postsRef.current.find((p) => p.postId === h);
       if (!post) return;
       setTab(post.channel);
-      setOpenIds((prev) => new Set(prev).add(post.postId));
-      setTimeout(() => document.getElementById(post.postId)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+      setSelectedId(post.postId);
     };
     applyHash();
     window.addEventListener("hashchange", applyHash);
     return () => window.removeEventListener("hashchange", applyHash);
-  }, [posts]);
+  }, []);
 
-  // Pull other reviewers' changes.
+  // Pull other reviewers' changes, and reload the posts when the admin adds or edits one.
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/reviews", { cache: "no-store" });
-      if (res.status === 401) return router.refresh();
-      if (!res.ok) throw new Error();
+      const [res, ppl, ver] = await Promise.all([
+        fetch("/api/reviews", { cache: "no-store" }),
+        fetch("/api/reviews/people", { cache: "no-store" }),
+        fetch("/api/posts/version", { cache: "no-store" }),
+      ]);
+      if ([res, ppl, ver].some((r) => r.status === 401)) return router.refresh();
+      if (!res.ok || !ppl.ok || !ver.ok) throw new Error();
+      setPeople(await ppl.json());
+      if ((await ver.json()).version !== versionRef.current) router.refresh();
       const list: Review[] = await res.json();
       setReviews(Object.fromEntries(list.map((r) => [r.postId, r])));
       setSync({ ok: true, at: new Date().toISOString() });
@@ -101,10 +101,16 @@ export default function CalendarApp({ posts, initialReviews, mix, canSignOut }: 
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  const onSaved = useCallback((postId: string, review: Review | null) => {
+  const onSaved = useCallback((postId: string, review: Review | null, list: PersonReview[] | null) => {
     setReviews((prev) => {
       const next = { ...prev };
       if (review) next[postId] = review;
+      else delete next[postId];
+      return next;
+    });
+    setPeople((prev) => {
+      const next = { ...prev };
+      if (list?.length) next[postId] = list;
       else delete next[postId];
       return next;
     });
@@ -120,6 +126,24 @@ export default function CalendarApp({ posts, initialReviews, mix, canSignOut }: 
     return s;
   }, [posts, reviews]);
   const pct = (n: number) => `${((n / posts.length) * 100).toFixed(2)}%`;
+
+  const isDirty = useCallback((postId: string) => dirtyIds.current.has(postId), []);
+
+  // Opening a post adds it to the address (so Back closes it and links can be shared).
+  const selectPost = useCallback((postId: string | null) => {
+    const prev = selectedRef.current;
+    setSelectedId(postId);
+    if (postId) {
+      if (prev) history.replaceState(null, "", `#${postId}`);
+      else history.pushState(null, "", `#${postId}`);
+    } else {
+      const ch = postsRef.current.find((p) => p.postId === prev)?.channel ?? "company";
+      history.replaceState(null, "", `#${ch}`);
+      if (prev) setTimeout(() => document.getElementById(prev)?.scrollIntoView({ block: "nearest" }), 30);
+    }
+  }, []);
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
 
   function selectTab(id: Tab) {
     setTab(id);
@@ -172,32 +196,42 @@ export default function CalendarApp({ posts, initialReviews, mix, canSignOut }: 
       <main className="wrap pb-20 pt-7">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-line pb-4 text-[13px]">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <label className="flex items-center gap-2.5">
-              <span className="field-label">Reviewing as</span>
-              <select id="reviewing-as" className="rounded-sq border border-line bg-white px-2.5 py-1.5 text-ink" value={reviewerName} onChange={(e) => chooseName(e.target.value)}>
-                <option value="">Choose your name</option>
-                {REVIEWERS.map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </select>
-            </label>
+            <span className="flex items-center gap-2.5">
+              <span className="field-label">Signed in as</span>
+              <b className="font-medium text-navy">{user.name}</b>
+              {user.role === "admin" && <span className="rounded-sq bg-navy px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-white">Admin</span>}
+            </span>
             <span className="flex items-center gap-2 text-muted" role="status">
               <span className={`h-2 w-2 rounded-full ${sync.ok ? "bg-ok-fg" : "bg-no-fg"}`} aria-hidden />
               {sync.ok ? `Live. Updated ${formatTimestamp(sync.at)}` : "Can't reach the server. Retrying…"}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {user.role === "admin" && (
+              <>
+                <a className="btn btn-primary" href="/admin/posts/new">
+                  New post
+                </a>
+                <a className="btn" href="/admin">
+                  Admin area
+                </a>
+                <a className="btn" href="/admin/reviews">
+                  Founder reviews
+                </a>
+                <a className="btn" href="/admin/suggestions">
+                  Suggestions to approve{openSuggestions ? ` (${openSuggestions})` : ""}
+                </a>
+              </>
+            )}
             <a className="btn" href="/api/export?format=xlsx">
               Export to Excel
             </a>
             <a className="btn" href="/api/export?format=csv">
               Export CSV
             </a>
-            {canSignOut && (
-              <button type="button" className="btn" onClick={signOut}>
-                Sign out
-              </button>
-            )}
+            <button type="button" className="btn" onClick={signOut}>
+              Sign out
+            </button>
           </div>
         </div>
 
@@ -207,9 +241,11 @@ export default function CalendarApp({ posts, initialReviews, mix, canSignOut }: 
             intro={mix.companyIntro}
             posts={company}
             reviews={reviews}
-            reviewerName={reviewerName}
-            openIds={openIds}
-            setOpenIds={setOpenIds}
+            people={people}
+            user={user}
+            selectedId={selectedId}
+            onSelect={selectPost}
+            isDirty={isDirty}
             onSaved={onSaved}
             onDirtyChange={onDirtyChange}
           />
@@ -220,9 +256,11 @@ export default function CalendarApp({ posts, initialReviews, mix, canSignOut }: 
             intro={mix.founderIntro}
             posts={founder}
             reviews={reviews}
-            reviewerName={reviewerName}
-            openIds={openIds}
-            setOpenIds={setOpenIds}
+            people={people}
+            user={user}
+            selectedId={selectedId}
+            onSelect={selectPost}
+            isDirty={isDirty}
             onSaved={onSaved}
             onDirtyChange={onDirtyChange}
           />

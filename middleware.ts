@@ -1,22 +1,35 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE, accessEnabled, accessToken } from "@/lib/auth";
+import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
+// Everyone signs in. /admin is for the admin only; route handlers check roles again.
 export async function middleware(req: NextRequest) {
-  if (!accessEnabled()) return NextResponse.next();
-
   const { pathname } = req.nextUrl;
   if (pathname === "/login" || pathname === "/api/login") return NextResponse.next();
 
-  const cookie = req.cookies.get(ACCESS_COOKIE)?.value;
-  if (cookie && cookie === (await accessToken())) return NextResponse.next();
-
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "Enter the access code to use this app." }, { status: 401 });
+  let user;
+  try {
+    user = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+  } catch (err) {
+    return new NextResponse(err instanceof Error ? err.message : "Sign-in isn't configured.", { status: 500 });
   }
-  const url = req.nextUrl.clone();
-  url.pathname = "/login";
-  url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
-  return NextResponse.redirect(url);
+
+  if (!user) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;
+    return NextResponse.redirect(url);
+  }
+
+  if (pathname.startsWith("/admin") && user.role !== "admin") {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+  return NextResponse.next();
 }
 
 export const config = {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { SOURCE_LABEL, STATUS_LABEL } from "@/lib/config";
-import type { ReviewStatus, SourceType } from "@/lib/types";
+import { SOURCE_LABEL, STATUS_LABEL, SUGGESTION_LABEL } from "@/lib/config";
+import type { ReviewStatus, SourceType, SuggestionStatus } from "@/lib/types";
 
 const STATUS_CLASS: Record<ReviewStatus, string> = {
   pending: "bg-wait-bg text-wait-fg",
@@ -15,6 +15,20 @@ export function StatusChip({ status }: { status: ReviewStatus }) {
     <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-2.5 pr-3 text-[12px] font-medium ${STATUS_CLASS[status]}`}>
       <span className="h-[7px] w-[7px] rounded-full bg-current" aria-hidden />
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+const SUGGESTION_CLASS: Record<SuggestionStatus, string> = {
+  open: "bg-wait-bg text-wait-fg",
+  accepted: "bg-ok-bg text-ok-fg",
+  declined: "bg-none-bg text-none-fg",
+};
+
+export function SuggestionChip({ status }: { status: SuggestionStatus }) {
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-medium ${SUGGESTION_CLASS[status]}`}>
+      {SUGGESTION_LABEL[status]}
     </span>
   );
 }

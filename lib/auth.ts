@@ -1,17 +1,29 @@
-// Optional access-code gate. Works in both the Edge middleware and Node route handlers.
-export const ACCESS_COOKIE = "amaya_access";
+import "server-only";
+import { cookies } from "next/headers";
+import { SESSION_COOKIE, verifySession } from "./session";
+import type { SessionUser } from "./types";
 
-export function accessCode(): string {
-  return (process.env.ACCESS_CODE || "").trim();
+export class AuthError extends Error {
+  constructor(
+    message: string,
+    public status: 401 | 403,
+  ) {
+    super(message);
+  }
 }
 
-export function accessEnabled(): boolean {
-  return accessCode().length > 0;
+export async function getSession(): Promise<SessionUser | null> {
+  return verifySession((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
-/** Cookie value = SHA-256 of the access code, so the code itself never sits in the browser. */
-export async function accessToken(code = accessCode()): Promise<string> {
-  const bytes = new TextEncoder().encode(`amaya-linkedin-review:${code}`);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+export async function requireUser(): Promise<SessionUser> {
+  const user = await getSession();
+  if (!user) throw new AuthError("Sign in to continue.", 401);
+  return user;
+}
+
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role !== "admin") throw new AuthError("Only the admin can do that.", 403);
+  return user;
 }

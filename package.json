@@ -16,7 +16,9 @@
     "node": ">=20.12"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "exceljs": "^4.4.0",
+    "jose": "^6.2.12",
     "mongodb": "^6.10.0",
     "next": "^15.5.4",
     "react": "^19.1.0",
